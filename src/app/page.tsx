@@ -1,100 +1,177 @@
-import Image from "next/image";
+"use client";
+
+import axios from 'axios';
+import { Aperture } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from "react";
+
+async function uploadToS3(imageBase64: string) {
+  try {
+    const result = await axios.post<{imageUrl: string}>('/api/upload', { imageBase64 })
+    
+    return result.data
+  } catch (error) {
+    console.log(error);
+  }
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [filter, setFilter] = useState<string>("none");
+  const [currentFilterIndex, setCurrentFilterIndex] = useState<number>(-1);
+  const [overlayImage, setOverlayImage] = useState<string>("");
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const router = useRouter();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const filters = [
+    { name: "Filtro Ceará", filter: "none", svg: "/filterceara.svg", overlay: "/Ceara.png" },
+    { name: "Filtro Fortaleza", filter: "none", svg: "/filterfortaleza.svg", overlay: "/Fortaleza.png" },
+    { name: "Filtro André Fernandes", filter: "none", svg: "/filterandrefernandes.svg", overlay: "/Andre.png" },
+    { name: "Filtro Evandro Leitão", filter: "none", svg: "/leitao.svg", overlay: "/leitao.png" },
+    { name: "Filtro s4S e STS", filter: "none", svg: "/s4s.svg", overlay: "/S4s.png" }
+  ];
+
+  useEffect(() => {
+    async function startVideo() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (error) {
+        console.error("Erro ao acessar a câmera: ", error);
+      }
+    }
+
+    startVideo();
+  }, []);
+
+  useEffect(() => {
+    if (currentFilterIndex >= 0) {
+      setFilter(filters[currentFilterIndex].filter);
+      setOverlayImage(filters[currentFilterIndex].overlay);
+    } else {
+      setFilter("none");
+      setOverlayImage("");
+    }
+  }, [currentFilterIndex]);
+
+  const applyFilter = (index: number) => {
+    setCurrentFilterIndex(index);
+    setIsFullscreen(true);
+  };
+
+  const handleCapture = async () => {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (videoRef.current && context) {
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      if (overlayImage) {
+        const img = new Image();
+        img.src = overlayImage;
+        img.onload = async () => {
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const capturedImageData = canvas.toDataURL("image/png");
+
+          const data = await uploadToS3(capturedImageData);
+
+          if (data?.imageUrl) {
+            router.push(`/imagepage?imageUrl=${encodeURIComponent(data?.imageUrl)}`);
+          }
+        };
+      } else {
+        const capturedImageData = canvas.toDataURL("image/png");
+
+        const data = await uploadToS3(capturedImageData);
+
+        if (data?.imageUrl) {
+          router.push(`/imagepage?imageUrl=${encodeURIComponent(data?.imageUrl)}`);
+        }
+      }
+    }
+  };
+
+  const handleBack = () => {
+    setIsFullscreen(false);
+    setCurrentFilterIndex(-1);
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col relative bg-cover bg-center bg-no-repeat">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`absolute top-0 left-0 w-full h-full object-cover ${isFullscreen ? "" : "-z-10"}`}
+        style={{ filter }}
+      />
+
+      {overlayImage && isFullscreen && (
+        <img
+          src={overlayImage}
+          alt="Overlay"
+          className="absolute top-0 left-0 w-full h-full object-cover"
+        />
+      )}
+
+      {!isFullscreen && (
+        <>
+          <div className="flex justify-center mt-40 ml-[23%] w-[572px] h-32 items-center bg-[#1F1F1FE5] rounded-[60px]">
+            <p className="text-white text-center font-poppins text-[32px] font-semibold leading-[48px] tracking-[0.02em]">
+              Crie sua foto interativa com a{" "}
+              <span className="text-[#FF9700]">s4S.tech</span>, vamos lá?
+            </p>
+          </div>
+
+          <div className="flex-grow"></div>
+
+          <div className="flex justify-center">
+            <img src="/sia.svg" alt="SIA Logo" className="w-[750px] h-[750px] -mb-64" />
+          </div>
+
+          <div className="relative w-full flex justify-center items-center mt-10 mb-12 mx-auto space-x-4">
+            {filters.map((filterItem, index) => (
+              <div
+                key={index}
+                className="rounded-full w-44 h-44 flex justify-center items-center cursor-pointer"
+                onClick={() => applyFilter(index)}
+              >
+                <img
+                  src={filterItem.svg}
+                  alt={filterItem.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {isFullscreen && (
+        <>
+          <button
+            onClick={handleCapture}
+            className="absolute top-3/4 left-1/2 transform -translate-x-1/2"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <Aperture  className="w-40 h-40 text-orange-400" />
+          </button>
+
+          <button
+            onClick={handleBack}
+            className="absolute top-4 right-12 p-4 rounded-full"
           >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+            <img src="/back.svg" alt="Back Button" className="h-20" />
+          </button>
+        </>
+      )}
+
+      <footer className="w-full h-36 flex items-center justify-center gap-4 border-b border-[#222222] bg-[#1B1B1B]">
+        <img src="/termosdeuso.svg" alt="Termos de Uso" className="h-[40%] -ml-2" />
+        <img src="/s4slogo.svg" alt="S4S Logo" className="h-[30%] ml-36" />
+        <img src="/instagram.svg" alt="Instagram" className="h-[25%]" />
       </footer>
     </div>
   );
