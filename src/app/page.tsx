@@ -34,7 +34,10 @@ export default function Home() {
   useEffect(() => {
     async function startVideo() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const logCamera =  devices.find(device => device.label.includes('C922'));
+        const stream = await navigator.mediaDevices.getUserMedia({ video: logCamera || true });
+        
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -65,8 +68,8 @@ export default function Home() {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (videoRef.current && context) {
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      canvas.width = window.innerWidth - 64;
+      canvas.height = window.innerHeight - 100;
       context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       if (overlayImage) {
         const img = new Image();
@@ -97,7 +100,7 @@ export default function Home() {
     setIsFullscreen(false);
     setCurrentFilterIndex(-1);
   };
-
+  //177.78%
   return (
     <div className="min-h-screen flex flex-col relative bg-cover bg-center bg-no-repeat">
       <video
